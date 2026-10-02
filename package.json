@@ -1,0 +1,22 @@
+{
+  "name": "seven-wonders-cinematic",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Continuous cinematic flight across stylized Seven Wonders. Personal demo by Kenny Kline (kkcandc).",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "@types/three": "^0.186.0",
+    "typescript": "5.9.3",
+    "vite": "6.4.3",
+    "vitest": "3.2.7"
+  }
+}
