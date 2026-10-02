@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#141820" />
+    <meta
+      name="description"
+      content="A continuous cinematic flight across stylized visions of the Seven Wonders. Personal demo by Kenny Kline."
+    />
+    <title>Seven Wonders — a continuous passage</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Outfit:wght@300;400;500&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <canvas id="view" aria-label="Cinematic flight across the seven wonders"></canvas>
+    <div id="iris" aria-hidden="true"></div>
+    <header class="top">
+      <p class="kicker">A continuous passage</p>
+      <h1 id="wonder-name">Great Wall</h1>
+      <p id="wonder-place">Yan Mountains</p>
+    </header>
+    <footer class="dock">
+      <div class="transport">
+        <button id="play" type="button">Pause</button>
+        <button id="sound" type="button" aria-pressed="false">Sound</button>
+        <button id="full" type="button">Full</button>
+        <span id="mode">Film</span>
+      </div>
+      <label class="scrub">
+        <span class="sr">Timeline</span>
+        <input id="scrub" type="range" min="0" max="1" step="0.001" value="0" />
+      </label>
+      <div id="chips" class="chips" role="group" aria-label="Wonders"></div>
+      <p class="hint">Space plays the film · WASD flies · drag looks · 1–7 jump</p>
+      <p class="credit">Kenny Kline · kkcandc</p>
+    </footer>
+    <div id="veil">
+      <div>
+        <p class="kicker">Seven Wonders</p>
+        <h2>A continuous passage</h2>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
