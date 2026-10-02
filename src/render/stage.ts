@@ -7,6 +7,8 @@ import { softDisc } from './textures';
 
 export interface Stage {
   update(atmo: Atmosphere, camera: THREE.Camera, time: number, wonderId: string): void;
+  /** Builds image-based lighting after the first frame is already on screen. */
+  warm(): void;
 }
 
 const skyVertex = /* glsl */ `
@@ -30,13 +32,15 @@ const skyFragment = /* glsl */ `
     float h = dir.y;
     vec3 col = mix(uHorizon, uZenith, pow(max(h, 0.0), 0.62));
     col = mix(uHorizon * 0.9, col, smoothstep(-0.15, 0.1, h));
-    float sun = max(dot(dir, normalize(uSunDir)), 0.0);
-    col += uSunColor * pow(sun, 7.0) * 0.7;
-    col += uSunColor * pow(sun, 1600.0) * 3.2;
+    float sun = clamp(max(dot(dir, normalize(uSunDir)), 0.0), 0.0, 1.0);
+    col += uSunColor * pow(sun, 6.0) * 0.55;
+    float disc = smoothstep(0.9975, 0.9996, sun);
+    col += uSunColor * disc * 2.4;
     vec3 cell = floor(dir * 280.0);
     float hash = fract(sin(dot(cell, vec3(127.1, 311.7, 74.7))) * 43758.5453);
     float stars = step(0.992, hash) * smoothstep(0.08, 0.4, h);
     col += stars * uStars * 1.6;
+    col = pow(max(col, vec3(0.0)), vec3(0.454545));
     gl_FragColor = vec4(col, 1.0);
   }
 `;
@@ -75,11 +79,12 @@ const waterFragment = /* glsl */ `
     float fres = pow(1.0 - max(dot(n, view), 0.0), 3.0);
     vec3 col = mix(uDeep, uShallow, fres);
     vec3 halfVec = normalize(normalize(uSunDir) + view);
-    float spec = pow(max(dot(n, halfVec), 0.0), 90.0);
+    float spec = pow(clamp(max(dot(n, halfVec), 0.0), 0.0, 1.0), 24.0);
     col += uSunColor * spec * 1.6;
     float dist = length(cameraPosition - vWorld);
     float fogFactor = 1.0 - exp(-uFogDensity * uFogDensity * dist * dist);
     col = mix(col, uFogColor, clamp(fogFactor, 0.0, 1.0));
+    col = pow(max(col, vec3(0.0)), vec3(0.454545));
     gl_FragColor = vec4(col, mix(0.78, 0.94, fres));
   }
 `;
@@ -110,7 +115,8 @@ const deckFragment = /* glsl */ `
     float through = smoothstep(1.5, 16.0, abs(cameraPosition.y - vWorld.y));
     float dist = length(cameraPosition - vWorld);
     float fog = exp(-dist * dist * 0.000012);
-    gl_FragColor = vec4(uColor, alpha * edge * through * fog);
+    vec3 col = pow(max(uColor, vec3(0.0)), vec3(0.454545));
+    gl_FragColor = vec4(col, alpha * edge * through * fog);
   }
 `;
 
@@ -226,10 +232,10 @@ export function createStage(scene: THREE.Scene, renderer: THREE.WebGLRenderer, q
       vertexShader: deckVertex,
       fragmentShader: deckFragment,
     });
-  const wallDeck = new THREE.Mesh(flat(1100, 820), deckMat(0.55, '#f3efe6'));
+  const wallDeck = new THREE.Mesh(flat(1100, 820), deckMat(0.28, '#f3efe6'));
   wallDeck.position.set(0, 16, 380);
   scene.add(wallDeck);
-  const andesDeck = new THREE.Mesh(flat(760, 520), deckMat(0.62, '#f7f9fb'));
+  const andesDeck = new THREE.Mesh(flat(760, 520), deckMat(0.34, '#f7f9fb'));
   andesDeck.position.set(0, 58, LAYOUT.machu.z);
   scene.add(andesDeck);
   const cityDeck = new THREE.Mesh(flat(860, 380), deckMat(0.28, '#e7b19a'));
@@ -237,12 +243,22 @@ export function createStage(scene: THREE.Scene, renderer: THREE.WebGLRenderer, q
   scene.add(cityDeck);
   const wallOpacity = wallDeck.material as THREE.ShaderMaterial;
 
-  const envs = bakeEnvironments(renderer);
+  const envs = new Map<string, THREE.Texture>();
   scene.environmentIntensity = 0.78;
   let envId = '';
+  let warmed = false;
   const fillOffset = new THREE.Vector3();
 
   return {
+    warm() {
+      if (warmed) return;
+      warmed = true;
+      try {
+        for (const [id, texture] of bakeEnvironments(renderer)) envs.set(id, texture);
+      } catch {
+        // Sky, sun, and fog still light the passage if the probe fails.
+      }
+    },
     update(atmo, camera, elapsed, wonderId) {
       time.value = elapsed;
       density.value = atmo.density;
@@ -254,6 +270,7 @@ export function createStage(scene: THREE.Scene, renderer: THREE.WebGLRenderer, q
       paint(ground, atmo.ground);
       sunDir.set(atmo.sunDir.x, atmo.sunDir.y, atmo.sunDir.z);
       fog.density = atmo.density;
+      renderer.setClearColor(horizon);
       sky.position.copy(camera.position);
       const position = camera.position;
       sun.position.copy(position).addScaledVector(sunDir, 240);
@@ -268,7 +285,7 @@ export function createStage(scene: THREE.Scene, renderer: THREE.WebGLRenderer, q
       sunSprite.material.color.copy(sunColor);
       const sprite = sunSprite.material as THREE.SpriteMaterial;
       sprite.opacity = sunDir.y > 0.05 ? 0.95 : 0;
-      (wallOpacity.uniforms.uOpacity as { value: number }).value = 0.22 + atmo.mist * 0.5;
+      (wallOpacity.uniforms.uOpacity as { value: number }).value = 0.1 + atmo.mist * 0.2;
       if (wonderId !== envId) {
         const next = envs.get(wonderId);
         if (next) scene.environment = next;
@@ -320,5 +337,6 @@ function bakeEnvironments(renderer: THREE.WebGLRenderer): Map<string, THREE.Text
   }
   pmrem.dispose();
   target.dispose();
+  renderer.setRenderTarget(null);
   return map;
 }

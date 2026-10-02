@@ -80,6 +80,9 @@ describe('flight', () => {
       }
     }
     expect(worst.clearance, `t=${worst.t.toFixed(3)} x=${worst.x.toFixed(1)} z=${worst.z.toFixed(1)}`).toBeGreaterThan(1.15);
+    const opening = sampleFlight(0);
+    const ridge = terrainHeight(wallAxisX(opening.position.z), opening.position.z);
+    expect(opening.position.y).toBeGreaterThan(ridge + 8);
   });
 
   it('visits each wonder in order', () => {
@@ -105,5 +108,7 @@ describe('atmosphere', () => {
     }
     expect(atmosphereAtZ(LAYOUT.christ.z).stars).toBeGreaterThan(0.4);
     expect(atmosphereAtZ(LAYOUT.taj.z).stars).toBe(0);
+    expect(atmosphereAtZ(200).density).toBeLessThan(0.002);
+    expect(atmosphereAtZ(LAYOUT.petra.z).density).toBeLessThan(0.0025);
   });
 });

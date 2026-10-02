@@ -54,8 +54,8 @@ function wallKey(t: number, z: number, fov: number): CameraKey {
   const roll = clamp(-curv * 0.0035, -0.11, 0.11);
   return {
     t,
-    pos: { x: x - 13, y: y + 7.2, z },
-    look: { x: x2 - 1.5, y: y2 + 11, z: z2 },
+    pos: { x: x - 22, y: y + 18, z },
+    look: { x: x2 - 4, y: y2 + 9, z: z2 },
     fov,
     roll,
   };

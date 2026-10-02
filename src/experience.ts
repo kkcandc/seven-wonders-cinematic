@@ -1,9 +1,4 @@
 import * as THREE from 'three';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { createScore } from './audio';
 import { addLandmarks } from './render/landmarks';
 import { addLife } from './render/life';
@@ -33,34 +28,6 @@ interface Tween {
 
 type Mode = 'cinematic' | 'orbit' | 'fly';
 
-const gradeShader = {
-  uniforms: {
-    tDiffuse: { value: null as THREE.Texture | null },
-    uTime: { value: 0 },
-  },
-  vertexShader: /* glsl */ `
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: /* glsl */ `
-    uniform sampler2D tDiffuse;
-    uniform float uTime;
-    varying vec2 vUv;
-    void main() {
-      vec3 col = texture2D(tDiffuse, vUv).rgb;
-      float dist = distance(vUv, vec2(0.5));
-      float vig = smoothstep(0.95, 0.25, dist);
-      col *= mix(1.0, vig, 0.42);
-      float grain = fract(sin(dot(vUv * vec2(920.0, 640.0) + uTime, vec2(12.9898, 78.233))) * 43758.5453);
-      col += (grain - 0.5) * 0.015;
-      gl_FragColor = vec4(col, 1.0);
-    }
-  `,
-};
-
 export function startExperience(canvas: HTMLCanvasElement, hud: Hud): void {
   const quality = detectQuality();
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -71,6 +38,9 @@ export function startExperience(canvas: HTMLCanvasElement, hud: Hud): void {
       antialias: !quality.mobile,
       powerPreference: 'high-performance',
       alpha: false,
+      // Keep the frame after present. Without this, some GPUs composite an
+      // empty buffer and the film reads as black with occasional flashes.
+      preserveDrawingBuffer: true,
     });
   } catch {
     hud.fail('This passage needs WebGL.');
@@ -93,14 +63,6 @@ export function startExperience(canvas: HTMLCanvasElement, hud: Hud): void {
   const life = addLife(scene, quality);
   const stage = createStage(scene, renderer, quality);
   const score = createScore();
-
-  const composer = new EffectComposer(renderer);
-  composer.addPass(new RenderPass(scene, camera));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), quality.bloom, 0.7, 0.84);
-  composer.addPass(bloom);
-  const grade = new ShaderPass(gradeShader);
-  composer.addPass(grade);
-  composer.addPass(new OutputPass());
 
   let lastFrame = performance.now();
   const pressed = new Set<string>();
@@ -157,8 +119,19 @@ export function startExperience(canvas: HTMLCanvasElement, hud: Hud): void {
   }
 
   function keepAboveGround(): void {
-    const ground = terrainHeight(camera.position.x, camera.position.z) + 1.2;
+    const x = camera.position.x;
+    const z = camera.position.z;
+    let peak = terrainHeight(x, z);
+    peak = Math.max(peak, terrainHeight(x + 8, z), terrainHeight(x - 8, z));
+    peak = Math.max(peak, terrainHeight(x, z + 8), terrainHeight(x, z - 8));
+    const lift = state.mode === 'cinematic' ? 5.5 : 2.2;
+    const ground = peak + lift;
     if (camera.position.y < ground) camera.position.y = ground;
+  }
+
+  function paint(): void {
+    renderer.setRenderTarget(null);
+    renderer.render(scene, camera);
   }
 
   function enterFly(): void {
@@ -342,7 +315,6 @@ export function startExperience(canvas: HTMLCanvasElement, hud: Hud): void {
     camera.aspect = width / Math.max(1, height);
     camera.updateProjectionMatrix();
     renderer.setSize(width, height, false);
-    composer.setSize(width, height);
   }
   window.addEventListener('resize', resize);
 
@@ -359,14 +331,16 @@ export function startExperience(canvas: HTMLCanvasElement, hud: Hud): void {
     }, 680);
   }
 
-  applyPose(sampleFlight(0));
+  applyPose(sampleFlight(state.t));
+  keepAboveGround();
   terrain.update(camera.position.x, camera.position.z);
   const opening = atmosphereAtZ(camera.position.z);
   renderer.toneMappingExposure = opening.exposure;
   stage.update(opening, camera, 0, wonderAtZ(camera.position.z).id);
-  composer.render();
+  paint();
   hud.ready();
   syncHud();
+  stage.warm();
 
   function frame(): void {
     const now = performance.now();
@@ -437,9 +411,8 @@ export function startExperience(canvas: HTMLCanvasElement, hud: Hud): void {
       const dist = camera.position.distanceTo(shaft.position);
       material.opacity = dist < 16 ? 0.015 : 0.065 + Math.sin(state.elapsed * 0.8 + shaft.position.z) * 0.02;
     }
-    (grade.uniforms.uTime as { value: number }).value = state.elapsed;
     score.setPlace(camera.position.z);
-    composer.render();
+    paint();
     syncHud();
 
     if (!state.degraded && state.elapsed > 2.5) {
@@ -449,8 +422,6 @@ export function startExperience(canvas: HTMLCanvasElement, hud: Hud): void {
         state.degraded = true;
         renderer.setPixelRatio(1);
         renderer.shadowMap.enabled = false;
-        bloom.strength = 0.18;
-        composer.setPixelRatio(1);
       }
     }
     requestAnimationFrame(frame);
